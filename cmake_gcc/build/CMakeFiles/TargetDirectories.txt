@@ -1,0 +1,4 @@
+C:/Users/rtphi/Projects/DeepFreeze/BlueTipz/BlueTipz_workspace_2026-6-1/bluetipz-rx-efr32bg21-sdk2026-6-1/cmake_gcc/build/CMakeFiles/slc.dir
+C:/Users/rtphi/Projects/DeepFreeze/BlueTipz/BlueTipz_workspace_2026-6-1/bluetipz-rx-efr32bg21-sdk2026-6-1/cmake_gcc/build/CMakeFiles/bluetipz-rx-efr32bg21-sdk2026-6-1.dir
+C:/Users/rtphi/Projects/DeepFreeze/BlueTipz/BlueTipz_workspace_2026-6-1/bluetipz-rx-efr32bg21-sdk2026-6-1/cmake_gcc/build/CMakeFiles/edit_cache.dir
+C:/Users/rtphi/Projects/DeepFreeze/BlueTipz/BlueTipz_workspace_2026-6-1/bluetipz-rx-efr32bg21-sdk2026-6-1/cmake_gcc/build/CMakeFiles/rebuild_cache.dir

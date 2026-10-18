@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="ASCII"?>
+<device:XMLDevice xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:device="http://www.silabs.com/ss/hwconfig/document/device.ecore" name="pin_tool.EFR32BG21A020F512IM32" partId="mcu.arm.efr32.bg21.efr32bg21a020f512im32" contextId="com.silabs.sdk.stack.simplicity_sdk:2026.6.1._329138832374425997">
+  <mode name="DefaultMode">
+    <property object="DefaultMode" propertyId="mode.diagramLocation" value="100, 100"/>
+    <property object="PA04" propertyId="pin.name" value="BUZZ_EN"/>
+    <property object="PA04" propertyId="pin.reserve" value="Reserved"/>
+    <property object="PA05" propertyId="pin.name" value="dbg_tx"/>
+    <property object="PA06" propertyId="pin.name" value="dbg_rx"/>
+    <property object="PC00" propertyId="pin.name" value="NTC_SENSOR_EN"/>
+    <property object="PC00" propertyId="pin.reserve" value="Reserved"/>
+    <property object="PC01" propertyId="pin.name" value="NTC_SENSOR"/>
+    <property object="PC03" propertyId="pin.name" value="LED2_EN"/>
+    <property object="PC03" propertyId="pin.reserve" value="Reserved"/>
+    <property object="PC04" propertyId="pin.name" value="LED1_EN"/>
+    <property object="PC04" propertyId="pin.reserve" value="Reserved"/>
+    <property object="PC05" propertyId="pin.name" value="PWR_BTN"/>
+    <property object="PC05" propertyId="pin.reserve" value="Reserved"/>
+    <property object="PD04" propertyId="pin.name" value="VIB_EN"/>
+    <property object="PD04" propertyId="pin.reserve" value="Reserved"/>
+    <property object="PORTIO" propertyId="portio.usart0.enable.rx" value="Enabled"/>
+    <property object="PORTIO" propertyId="portio.usart0.enable.tx" value="Enabled"/>
+    <property object="PORTIO" propertyId="portio.usart0.location.rx" value="6"/>
+    <property object="PORTIO" propertyId="portio.usart0.location.tx" value="5"/>
+    <property object="PTI" propertyId="ABModule.selectedRequirement" value="pti%T%SL_RAIL_UTIL_PTI%T%sl_rail_util_pti_config.h"/>
+    <property object="PTI" propertyId="ABPeripheral.included" value="true"/>
+  </mode>
+  <modeTransition>
+    <property object="RESET &#x2192; DefaultMode" propertyId="modeTransition.source" value="RESET"/>
+    <property object="RESET &#x2192; DefaultMode" propertyId="modeTransition.target" value="DefaultMode"/>
+  </modeTransition>
+</device:XMLDevice>

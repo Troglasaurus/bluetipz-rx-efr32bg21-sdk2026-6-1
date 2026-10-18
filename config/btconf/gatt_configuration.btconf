@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <!--Custom BLE GATT (BlueTipz Rx, ported from SDK 4.3.1)-->
+<gatt generic_attribute_service="true" header="gatt_db.h" name="Custom BLE GATT" out="gatt_db.c" prefix="gattdb_">
+
+  <!--Generic Access-->
+  <service advertise="false" name="Generic Access" requirement="mandatory" sourceId="org.bluetooth.service.generic_access" type="primary" uuid="1800">
+    <informativeText>Abstract: The generic_access service contains generic information about the device. All available Characteristics are readonly. </informativeText>
+
+    <!--Device Name-->
+    <characteristic const="false" id="device_name" name="Device Name" sourceId="org.bluetooth.characteristic.gap.device_name" uuid="2A00">
+      <value length="8" type="utf-8" variable_length="false">BlueTipz</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--Appearance-->
+    <characteristic const="true" name="Appearance" sourceId="org.bluetooth.characteristic.gap.appearance" uuid="2A01">
+      <informativeText>Abstract: The external appearance of this device. The values are composed of a category (10-bits) and sub-categories (6-bits). </informativeText>
+      <value length="2" type="hex" variable_length="false">0000</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+  </service>
+
+  <!--Device Information-->
+  <service advertise="false" id="device_information" name="Device Information" requirement="mandatory" sourceId="org.bluetooth.service.device_information" type="primary" uuid="180A">
+    <informativeText>Abstract: The Device Information Service exposes manufacturer and/or vendor information about a device. Summary: This service exposes manufacturer information about a device. The Device Information Service is instantiated as a Primary Service. Only one instance of the Device Information Service is exposed on a device.</informativeText>
+
+    <!--SWRev-->
+    <characteristic const="false" id="sw_rev" name="SWRev" sourceId="custom.type" uuid="5a75954f-1661-4e92-acda-d0f22548dd38">
+      <description>SWRev</description>
+      <value length="8" type="utf-8" variable_length="false">02.01.00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--Model Number String-->
+    <characteristic const="false" id="model_number_string" name="Model Number String" sourceId="org.bluetooth.characteristic.model_number_string" uuid="2A24">
+      <informativeText>Abstract: The value of this characteristic is a UTF-8 string representing the model number assigned by the device vendor.</informativeText>
+      <description>Model Number String</description>
+      <value length="8" type="utf-8" variable_length="false">BlueTipz</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--Hardware Revision String-->
+    <characteristic const="false" id="hardware_revision_string" name="Hardware Revision String" sourceId="org.bluetooth.characteristic.hardware_revision_string" uuid="2A27">
+      <informativeText>Summary: The value of this characteristic is a UTF-8 string representing the hardware revision for the hardware within the device.</informativeText>
+      <description>Hardware Revision String</description>
+      <value length="4" type="utf-8" variable_length="false">2213</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--Firmware Revision String-->
+    <characteristic const="false" id="firmware_revision_string" name="Firmware Revision String" sourceId="org.bluetooth.characteristic.firmware_revision_string" uuid="2A26">
+      <informativeText>Summary: The value of this characteristic is a UTF-8 string representing the firmware revision for the firmware within the device.</informativeText>
+      <description>Firmware Revision</description>
+      <value length="4" type="utf-8" variable_length="false">2211</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--Manufacturer Name String-->
+    <characteristic const="true" id="manufacturer_name_string" name="Manufacturer Name String" sourceId="org.bluetooth.characteristic.manufacturer_name_string" uuid="2A29">
+      <informativeText>Abstract: The value of this characteristic is a UTF-8 string representing the name of the manufacturer of the device.</informativeText>
+      <description>Manufacturing Name String</description>
+      <value length="15" type="utf-8" variable_length="false">Deep Freeze LLC</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--System ID-->
+    <characteristic const="false" id="system_id" name="System ID" sourceId="org.bluetooth.characteristic.system_id" uuid="2A23">
+      <informativeText>Abstract: The SYSTEM ID characteristic consists of a structure with two fields. The first field are the LSOs and the second field contains the MSOs. This is a 64-bit structure which consists of a 40-bit manufacturer-defined identifier concatenated with a 24 bit unique Organizationally Unique Identifier (OUI). The OUI is issued by the IEEE Registration Authority (http://standards.ieee.org/regauth/index.html) and is required to be used in accordance with IEEE Standard 802-2001.6 while the least significant 40 bits are manufacturer defined. If System ID generated based on a Bluetooth Device Address, it is required to be done as follows. System ID and the Bluetooth Device Address have a very similar structure: a Bluetooth Device Address is 48 bits in length and consists of a 24 bit Company Assigned Identifier (manufacturer defined identifier) concatenated with a 24 bit Company Identifier (OUI). In order to encapsulate a Bluetooth Device Address as System ID, the Company Identifier is concatenated with 0xFFFE followed by the Company Assigned Identifier of the Bluetooth Address. For more guidelines related to EUI-64, refer to http://standards.ieee.org/develop/regauth/tut/eui64.pdf. Examples: If the system ID is based of a Bluetooth Device Address with a Company Identifier (OUI) is 0x123456 and the Company Assigned Identifier is 0x9ABCDE, then the System Identifier is required to be 0x123456FFFE9ABCDE.</informativeText>
+      <value length="8" type="hex" variable_length="false"/>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+  </service>
+
+  <!--Battery Service-->
+  <service advertise="false" id="battery_service_0" name="Battery Service" requirement="mandatory" sourceId="org.bluetooth.service.battery_service" type="primary" uuid="180F">
+    <informativeText>Abstract: The Battery Service exposes the state of a battery within a device.
+Summary: The Battery Service exposes the Battery State and Battery Level of a single battery or set of batteries in a device.</informativeText>
+
+    <!--Battery Level-->
+    <characteristic const="false" id="battery_level" name="Battery Level" sourceId="org.bluetooth.characteristic.battery_level" uuid="2A19">
+      <informativeText>Abstract: 
+            The current charge level of a battery. 100% represents fully charged while 0% represents fully discharged.
+        </informativeText>
+      <value length="1" type="hex" variable_length="false">00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+
+      <!--Characteristic Presentation Format-->
+      <descriptor const="false" discoverable="true" id="characteristic_presentation_format" name="Characteristic Presentation Format" sourceId="org.bluetooth.descriptor.gatt.characteristic_presentation_format" uuid="2904">
+        <informativeText>Abstract: 
+        The Characteristic Presentation Format descriptor defines the format of the Characteristic Value.            
+		
+Summary: 
+        One or more Characteristic Presentation Format descriptors may be present. If multiple of these descriptors are present, then a Aggregate Formate descriptor is present.
+        This descriptor is read only and does not require authentication or authorization to read.
+        This descriptor is composed of five parts: format, exponent, unit, name space and description.
+        The Format field determines how a single value contained in the Characteristic Value is formatted.
+        The Exponent field is used with interger data types to determine how the Characteristic Value is furhter formatted.
+        The actual value = Characteristic Value * 10^Exponent.            
+		
+Examples: 
+            When encoding an IPv4 address, the uint32 Format type is used.
+		 
+            When encoding an IPv6 address, the uint128 Format type is used.
+		 
+            When encoding a Bluetooth address (BD_ADDR), the uint48 Format type is used.
+		 
+            For a Characteristic Value of 23 and an Exponent of 2, the actual value is 2300
+		 
+            For a Characteristi Value of 3892 and an Exponent of -3, the actual value is 3.892
+		</informativeText>
+        <properties>
+          <read authenticated="false" bonded="false" encrypted="false"/>
+        </properties>
+        <value length="7" type="hex" variable_length="false"/>
+      </descriptor>
+    </characteristic>
+  </service>
+
+  <!--TX Filter-->
+  <service advertise="false" id="tx_filter" name="TX Filter" requirement="mandatory" sourceId="custom.typ" type="primary" uuid="aa8d5dcd-3927-43bf-a76b-e85b0b3fce50">
+
+    <!--Filter Param-->
+    <characteristic const="false" id="filter_param" name="Filter Param" sourceId="custom.typ" uuid="84020e0e-9a30-4ce7-ab08-cacd0e11cf2d">
+      <description>Filter Param</description>
+      <value length="0" type="hex" variable_length="false">00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--Filter Value-->
+    <characteristic const="false" id="filter_value" name="Filter Value" sourceId="custom.type" uuid="521a905d-481d-42c7-b564-29899a8b0178">
+      <description>Filter Value</description>
+      <value length="0" type="user" variable_length="false">00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+  </service>
+
+  <!--BlueTipz Tipup-->
+  <service advertise="false" name="BlueTipz Tipup" requirement="mandatory" sourceId="custom.type" type="primary" uuid="beb54859-b4b6-4aff-bc7f-a12e8a3cd858">
+
+    <!--xgatt_owner-->
+    <characteristic const="false" id="xgatt_owner" name="xgatt_owner" sourceId="custom.type" uuid="d498646a-72f2-48fd-9032-8ea1dd55a639">
+      <description>Owner</description>
+      <value length="32" type="utf-8" variable_length="false">00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_phone-->
+    <characteristic const="false" id="xgatt_phone" name="xgatt_phone" sourceId="custom.type" uuid="1b4f5cd0-33c0-4f5b-988b-3efedccf5681">
+      <description>Phone Number</description>
+      <value length="16" type="utf-8" variable_length="false">00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_email-->
+    <characteristic const="false" id="xgatt_email" name="xgatt_email" sourceId="custom.type" uuid="627347c0-9a72-4c03-8877-b4ff6bf73f55">
+      <description>EMail Address</description>
+      <value length="32" type="utf-8" variable_length="false">00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_name-->
+    <characteristic const="false" id="xgatt_name" name="xgatt_name" sourceId="custom.type" uuid="ba631b8e-cc6f-4a78-b15a-8f6377fefe19">
+      <description>Name</description>
+      <value length="32" type="utf-8" variable_length="false">00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_count-->
+    <characteristic const="false" id="xgatt_count" name="xgatt_count" sourceId="custom.type" uuid="ed0d5a2e-00cd-4a3c-bd58-31e9e22a9c44">
+      <description>Count</description>
+      <value length="4" type="hex" variable_length="false">00000000</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_mode-->
+    <characteristic const="false" id="xgatt_mode" name="xgatt_mode" sourceId="custom.type" uuid="e9322bef-eea4-499c-ab1e-c3a27eb04061">
+      <description>Mode</description>
+      <value length="4" type="hex" variable_length="false">00000000</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_led_period-->
+    <characteristic const="false" id="xgatt_led_period" name="xgatt_led_period" sourceId="custom.type" uuid="61718966-b499-4fd4-a60a-8c49ecb39789">
+      <description>LED period</description>
+      <value length="1" type="hex" variable_length="false">64</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_trigger_edges-->
+    <characteristic const="false" id="xgatt_trigger_edges" name="xgatt_trigger_edges" sourceId="custom.type" uuid="80d6cfb7-95b2-47a5-8d6c-7cadc686f8b8">
+      <description>Trigger Values</description>
+      <value length="2" type="hex" variable_length="false">d381</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_xmit_duration-->
+    <characteristic const="false" id="xgatt_xmit_duration" name="xgatt_xmit_duration" sourceId="custom.type" uuid="43546c90-29d3-4474-a7d4-7bbef1383da4">
+      <description>Transmit Duration</description>
+      <value length="2" type="hex" variable_length="false">0200</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_debounce-->
+    <characteristic const="false" id="xgatt_debounce" name="xgatt_debounce" sourceId="custom.type" uuid="af31df36-468e-4590-8def-92b9a75df10d">
+      <description>Debounce</description>
+      <value length="1" type="hex" variable_length="false">06</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_power-->
+    <characteristic const="false" id="xgatt_power" name="xgatt_power" sourceId="custom.type" uuid="3cd408b1-a69a-45e5-9df9-5e14b39f6f11">
+      <description>Transmit Power</description>
+      <value length="1" type="hex" variable_length="false">00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_rgb-->
+    <characteristic const="false" id="xgatt_rgb" name="xgatt_rgb" sourceId="custom.type" uuid="0c8abeaf-96a7-47ae-8aee-e253107ee414">
+      <description>RGB Values</description>
+      <value length="3" type="hex" variable_length="false">320A00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_suppress-->
+    <characteristic const="false" id="xgatt_suppress" name="xgatt_suppress" sourceId="custom.type" uuid="9d1728eb-88c0-44dd-acfa-97d5ac8810fe">
+      <informativeText>Suppress: 0x01 - Buzzer (Rx) 0x02 - LEDs (Rx / Tx) 0x04 - Status (Rx)  0x08 - Vibrator (Rx) 0x10 - Coded Phy (Tx)</informativeText>
+      <description>Suppress Feature</description>
+      <value length="1" type="user" variable_length="false">00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--xgatt_repeat-->
+    <characteristic const="false" id="xgatt_repeat" name="xgatt_repeat" sourceId="custom.type" uuid="27a1d12a-3cff-49a0-bd21-ab2d57feb5e9">
+      <description>Repeat Piggyback</description>
+      <value length="1" type="user" variable_length="false">00</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+        <write authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+  </service>
+
+  <!--Device Data-->
+  <service advertise="false" name="Device Data" requirement="mandatory" sourceId="custom.type" type="primary" uuid="f8e42381-9b9c-4908-8229-899a5eb78429">
+
+    <!--Battery Voltage-->
+    <characteristic const="false" id="battery_voltage" name="Battery Voltage" sourceId="custom.type" uuid="c3b08ee4-b339-4016-b7d5-c7cbc281d4ea">
+      <description>Battery Voltage</description>
+      <value length="2" type="hex" variable_length="false">0000</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+
+    <!--Temperature-->
+    <characteristic const="false" id="temperature" name="Temperature" sourceId="org.bluetooth.characteristic.temperature" uuid="2A6E">
+      <value length="2" type="hex" variable_length="false">0000</value>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+  </service>
+
+  <!--Tx Power-->
+  <service advertise="false" id="tx_power" name="Tx Power" requirement="mandatory" sourceId="org.bluetooth.service.tx_power" type="primary" uuid="1804">
+    <informativeText>Abstract: This service exposes a device's current transmit power level when in a connection.
+Summary: The Tx Power service is instantiated as a Primary Service. There is only one instance of the Tx Power service on a device. There is exactly one instance of the Tx Power Level characteristic</informativeText>
+
+    <!--Tx Power Level-->
+    <characteristic const="false" id="tx_power_level" name="Tx Power Level" sourceId="org.bluetooth.characteristic.tx_power_level" uuid="2A07">
+      <informativeText>Abstract: 
+      The Transmit Power Level characteristic represents the current transmit power level in dBm, and the level ranges from -100 dBm to +20 dBm to a resolution of 1 dBm.            
+		
+Summary: 
+    The value of the characteristic is a signed 8 bit integer that has a fixed point exponent of 0.            
+		
+Examples: The value 0x12 is interpreted as +18dBm The value 0xEE is interpreted as -18dBm</informativeText>
+      <value length="1" type="hex" variable_length="false"/>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+  </service>
+</gatt>
+</project>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="ASCII"?>
+<model:MDescriptors xmlns:model="http://www.silabs.com/ss/Studio.ecore">
+  <descriptors name="bluetipz-rx-efr32bg21-sdk2026-6-1">
+    <properties key="projectCommon.sdkId" value="com.silabs.sdk.stack.simplicity_sdk:2026.6.1._329138832374425997"/>
+    <properties key="universalConfig.relativeWorkspacePath" value="..\bluetipz-rx-efr32bg21-sdk2026-6-1.slcw"/>
+    <properties key="universalConfig.generationDirectory" value=""/>
+    <properties key="universalConfig.toolchainCompatibility" value="iar llvm gcc"/>
+    <properties key="projectCommon.overwriteCopiedSources" value="false"/>
+    <properties key="projectCommon.boardIds" value="com.silabs.board.none:0.0.0"/>
+    <properties key="projectCommon.kitId" value=""/>
+    <properties key="projectCommon.partId" value="mcu.arm.efr32.bg21.efr32bg21a020f512im32"/>
+    <properties key="projectCommon.toolchainId" value="com.silabs.ss.framework.project.core.noToolChain:0.0.0"/>
+    <properties key="universalConfig.projectTypeIds" value="visual-studio-code"/>
+    <properties key="projectCommon.importModeId" value="COPY"/>
+    <properties key="universalConfig.filteredToolchains" value="iar llvm gcc"/>
+    <properties key="universalConfig.ucProjectCacheState" value="1929685845"/>
+    <properties key="universalConfig.compSelProjInstanceId" value="1791759685057"/>
+  </descriptors>
+</model:MDescriptors>
