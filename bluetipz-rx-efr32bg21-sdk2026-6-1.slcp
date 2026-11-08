@@ -54,6 +54,9 @@ component:
   id: bluetooth_feature_extended_advertiser
 - package: simplicity_sdk
   vendor: silabs
+  id: bluetooth_feature_gap
+- package: simplicity_sdk
+  vendor: silabs
   id: bluetooth_feature_gatt
 - package: simplicity_sdk
   vendor: silabs
