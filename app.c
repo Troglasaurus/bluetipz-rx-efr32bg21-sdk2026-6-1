@@ -216,6 +216,23 @@ typedef enum
     PS_STORED_LAST_STATE,
 } ps_keys_t;
 
+/*
+ * Port note (SiSDK 2026.6.1): sl_bt_nvm_load() now returns SL_STATUS_NOT_FOUND
+ * (0x002D) for a key that has never been written. Gecko SDK 4.3.1 returned
+ * SL_STATUS_BT_PS_KEY_NOT_FOUND. Checking only the old code made fill_addrs()
+ * return early on a blank unit, so init_ps() never ran and the defaults
+ * (suppress = SUPPRESS_STATUS, empty filter list) were never stored; the Rx
+ * then reported xgatt_suppress = 0x00. All "key missing" checks use this.
+ * SL_STATUS_BT_UNSPECIFIED is what ps_load_object() returns for a size
+ * mismatch, which is also treated as missing (as in 4.3.1).
+ */
+static inline bool ps_key_missing(sl_status_t sc)
+{
+    return (sc == SL_STATUS_NOT_FOUND)
+        || (sc == SL_STATUS_BT_PS_KEY_NOT_FOUND)
+        || (sc == SL_STATUS_BT_UNSPECIFIED);
+}
+
 typedef enum
 {
     //TIMER_BOOT,
@@ -975,7 +992,7 @@ uint16_t fill_addrs()
         sc = ps_load_object(PS_STORED_ADDR_FIRST + i, &addrs[i], sizeof(addrs[i]) );
 
         // if the value's key does not exist or was unspecified, initialize and break out
-        if ( (sc == SL_STATUS_BT_PS_KEY_NOT_FOUND ) || (sc == SL_STATUS_BT_UNSPECIFIED ))
+        if ( ps_key_missing(sc) )   // port note: see ps_key_missing()
         {
             init_ps();
             i--;
@@ -991,7 +1008,7 @@ uint16_t fill_addrs()
 
     // Store suppression  flags to flash
     sc = ps_load_object(PS_STORED_SUPPRESS, &suppress_filter, 1);
-    if ( (sc == SL_STATUS_BT_PS_KEY_NOT_FOUND ) || (sc == SL_STATUS_BT_UNSPECIFIED ))
+    if ( ps_key_missing(sc) )   // port note: see ps_key_missing()
     {
         suppress_filter = SUPPRESS_STATUS;
         ps_save_object( PS_STORED_SUPPRESS, &suppress_filter, 1 );
@@ -999,7 +1016,7 @@ uint16_t fill_addrs()
 
     // Store repeater address to flash
     sc = ps_load_object(PS_STORED_REPEATER, repeater_addr, 6);
-    if ( (sc == SL_STATUS_BT_PS_KEY_NOT_FOUND ) || (sc == SL_STATUS_BT_UNSPECIFIED ))
+    if ( ps_key_missing(sc) )   // port note: see ps_key_missing()
     {
         memset( repeater_addr, 0, 6 );
         ps_save_object( PS_STORED_REPEATER, repeater_addr, 6 );
@@ -1137,7 +1154,7 @@ static SM_States_t get_latest_state( void )
     sl_status_t sc = ps_load_object(PS_STORED_LAST_STATE,
                                     &storedState,
                                     sizeof(SM_States_t ));
-    if ( (sc == SL_STATUS_BT_PS_KEY_NOT_FOUND ) || (sc == SL_STATUS_BT_UNSPECIFIED ))
+    if ( ps_key_missing(sc) )   // port note: see ps_key_missing()
     {
         set_latest_state( SM_POWERING_ON );
         storedState = SM_POWERING_ON;

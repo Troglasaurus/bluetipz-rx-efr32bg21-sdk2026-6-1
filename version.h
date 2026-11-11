@@ -19,7 +19,7 @@
  *****************************************************************************/
 #define BUILD_DATE                      "11/06/2026"
 
-#define APP_VERSION                     "04.00.00"
+#define APP_VERSION                     "04.00.02"
 #define FW_VERSION                      "2212"
 #define DELIM                           "========="
 
