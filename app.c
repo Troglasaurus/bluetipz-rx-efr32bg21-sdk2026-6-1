@@ -924,7 +924,7 @@ int16_t adc_read (int channel)
 
     // Wait for conversion to complete.  This is set by IADC_IRQHandler(),
     // which is called when the IADC conversion is finished
-    while (adc_done)
+    while (!adc_done)
     {
         ; // Wait
     }
