@@ -214,6 +214,9 @@ typedef enum
     PS_STORED_SUPPRESS,
     PS_STORED_REPEATER,
     PS_STORED_LAST_STATE,
+#ifdef BT_DEBUG_RESET_LOG
+    PS_STORED_DEBUG_LOG,        // DEBUG reset log - remove before release
+#endif
 } ps_keys_t;
 
 /*
@@ -547,6 +550,243 @@ static simple_timer_def_t simple_timer_def[TIMER_MAX] =
 
 
 /**************************************************************************//**
+ * Debug reset log - TEMPORARY, REMOVE BEFORE A CLIENT RELEASE
+ *
+ * Enabled by BT_DEBUG_RESET_LOG in common.h. Purpose: find out why an idle Rx
+ * resets (heard as a power-on beep) after several hours.
+ *
+ *  - Every boot: the RMU reset cause goes into a 5-entry history in NVM key
+ *    PS_STORED_DEBUG_LOG, with a run counter.
+ *  - The watchdog WARN interrupt (75% of the ~8 s period, ~6 s with no feed)
+ *    saves the interrupted PC, LR and xPSR in .noinit RAM, which survives the
+ *    watchdog reset that follows.
+ *  - A failed APP_ASSERT / APP_ASSERT_STATUS saves its line and status code
+ *    in .noinit RAM before app_assert spins into the watchdog.
+ *  - The watchdog feed timer keeps the run's uptime in .noinit RAM.
+ *  - At the next boot those are moved to NVM and shown as ASCII text:
+ *      xgatt_name  "R<run> RC<cause> UP<h>h<m>m"       this run, its reset
+ *                  cause, and how long the PREVIOUS run lasted ("UP?" if RAM
+ *                  was lost, e.g. power-on or brown-out)
+ *      xgatt_owner "RC <newest> ... <oldest>"           reset cause history
+ *      xgatt_email "P<pc> L<lr> X<exc> R<run>"          last watchdog capture
+ *                  X = exception number running at the hang (0 = main loop)
+ *      xgatt_phone "L<line> S<status> R<run>"          last failed assert
+ *                  (16 bytes: line mod 10000, run mod 1000)
+ *                  (app.c line number; S FFFF = APP_ASSERT condition)
+ *  - Reset cause bits: 0001 POR, 0002 pin, 0004 EM4, 0008 WDOG0, 0010 WDOG1,
+ *    0020 lockup, 0040 sysreq, 0080 DVDD BOD, 0100 DVDD LE BOD,
+ *    0200 DEC BOD, 0400 AVDD BOD, 0800 IOVDD0 BOD (see displayResetCause()).
+ *  - A WDOG reset with no new PC record means the hang was in an interrupt of
+ *    priority 0 or with all interrupts disabled (PRIMASK).
+ *****************************************************************************/
+#ifdef BT_DEBUG_RESET_LOG
+
+#define DBG_NOINIT_MAGIC        ((uint32_t)0xB1DE5EEDUL)
+#define DBG_RC_HIST             5
+
+typedef struct
+{
+    uint32_t    magic;
+    uint32_t    uptime_s;           // updated on every watchdog feed
+    uint32_t    hang_valid;
+    uint32_t    hang_pc;
+    uint32_t    hang_lr;
+    uint32_t    hang_xpsr;
+    uint32_t    assert_valid;
+    uint32_t    assert_line;
+    uint32_t    assert_status;
+    uint32_t    magic_inv;
+} dbg_noinit_t;
+
+typedef struct
+{
+    uint32_t    runs;                       // boot counter
+    uint16_t    rc_hist[DBG_RC_HIST];       // [0] = newest
+    uint32_t    prev_uptime_s;              // 0xFFFFFFFF = unknown
+    uint32_t    hang_pc;
+    uint32_t    hang_lr;
+    uint16_t    hang_exc;
+    uint16_t    hang_run;                   // 0 = none recorded yet
+    uint16_t    assert_line;
+    uint16_t    assert_status;
+    uint16_t    assert_run;                 // 0 = none recorded yet
+} dbg_log_t;                                // 40 bytes, NVM limit is 56
+
+static dbg_noinit_t dbg_noinit __attribute__((section(".noinit")));
+static dbg_noinit_t dbg_prev;               // copy of the previous run's record
+static bool         dbg_prev_valid  = false;
+static uint32_t     dbg_reset_cause = 0;
+
+static uint32_t dbg_uptime_s(void)
+{
+    return (uint32_t)(sl_sleeptimer_get_tick_count64()
+                      / sl_sleeptimer_get_timer_frequency());
+}
+
+/* Called first thing in app_init(), before the stack is up. */
+static void debug_log_early_init(uint32_t resetCause)
+{
+    dbg_reset_cause = resetCause;
+
+    dbg_prev_valid = (dbg_noinit.magic == DBG_NOINIT_MAGIC)
+                  && (dbg_noinit.magic_inv == (uint32_t)~DBG_NOINIT_MAGIC);
+    if (dbg_prev_valid)
+    {
+        dbg_prev = dbg_noinit;
+    }
+
+    memset(&dbg_noinit, 0, sizeof(dbg_noinit));
+    dbg_noinit.magic     = DBG_NOINIT_MAGIC;
+    dbg_noinit.magic_inv = (uint32_t)~DBG_NOINIT_MAGIC;
+}
+
+/* Called from the APP_ASSERT macros in common.h on failure. Keeps the first
+ * failure of the run (the one that started the trouble). */
+void debug_record_assert(uint32_t line, uint32_t status)
+{
+    if (!dbg_noinit.assert_valid)
+    {
+        dbg_noinit.assert_line   = line;
+        dbg_noinit.assert_status = status;
+        dbg_noinit.assert_valid  = 1;
+    }
+}
+
+/* C half of the WDOG0 warning handler. frame = exception stack frame of the
+ * interrupted code: r0 r1 r2 r3 r12 lr pc xpsr. Does not feed the watchdog;
+ * the reset still happens at the full period. */
+void __attribute__((used)) debug_wdog_warn_capture(uint32_t *frame)
+{
+    if (!dbg_noinit.hang_valid)
+    {
+        dbg_noinit.hang_lr    = frame[5];
+        dbg_noinit.hang_pc    = frame[6];
+        dbg_noinit.hang_xpsr  = frame[7];
+        dbg_noinit.uptime_s   = dbg_uptime_s();
+        dbg_noinit.hang_valid = 1;
+    }
+    WDOGn_IntClear(DEFAULT_WDOG, WDOG_IF_WARN);
+}
+
+/* Overrides the weak default in the startup file. Picks the active stack
+ * from EXC_RETURN and hands the stacked frame to debug_wdog_warn_capture(). */
+void __attribute__((naked)) WDOG0_IRQHandler(void)
+{
+    __asm volatile (
+        "tst    lr, #4                  \n"
+        "ite    eq                      \n"
+        "mrseq  r0, msp                 \n"
+        "mrsne  r0, psp                 \n"
+        "b      debug_wdog_warn_capture \n"
+    );
+}
+
+static void dbg_gatt_text(uint16_t handle, size_t len, const char *text)
+{
+    uint8_t buf[33] = {0};                  // longest of these is 32
+    size_t  n = strlen(text);
+
+    if (len > 32) len = 32;
+    if (n > len)  n = len;
+    memcpy(buf, text, n);                   // zero padded to the full length
+    sl_bt_gatt_server_write_attribute_value(handle, 0, len, buf);
+}
+
+/* Called from the boot event, after fill_addrs() (which may erase NVM on a
+ * blank unit). Moves the previous run's record to NVM and shows the log. */
+static void debug_log_persist_and_publish(void)
+{
+    dbg_log_t   log;
+    size_t      len = 0;
+    char        txt[33];
+    sl_status_t sc;
+
+    sc = sl_bt_nvm_load(PS_STORED_DEBUG_LOG, sizeof(log), &len, (uint8_t *)&log);
+    if ((sc != SL_STATUS_OK) || (len != sizeof(log)))
+    {
+        memset(&log, 0, sizeof(log));
+    }
+
+    log.runs++;
+    memmove(&log.rc_hist[1], &log.rc_hist[0],
+            (DBG_RC_HIST - 1) * sizeof(log.rc_hist[0]));
+    log.rc_hist[0] = (uint16_t)dbg_reset_cause;
+
+    log.prev_uptime_s = dbg_prev_valid ? dbg_prev.uptime_s : 0xFFFFFFFFUL;
+
+    if (dbg_prev_valid && dbg_prev.hang_valid)
+    {
+        log.hang_pc  = dbg_prev.hang_pc;
+        log.hang_lr  = dbg_prev.hang_lr;
+        log.hang_exc = (uint16_t)(dbg_prev.hang_xpsr & 0x1FF);
+        log.hang_run = (uint16_t)(log.runs - 1);
+    }
+    if (dbg_prev_valid && dbg_prev.assert_valid)
+    {
+        log.assert_line   = (uint16_t)dbg_prev.assert_line;
+        log.assert_status = (uint16_t)dbg_prev.assert_status;
+        log.assert_run    = (uint16_t)(log.runs - 1);
+    }
+
+    sl_bt_nvm_save(PS_STORED_DEBUG_LOG, sizeof(log), (uint8_t *)&log);
+
+    // xgatt_name: this run, its reset cause, length of the previous run
+    if (log.prev_uptime_s == 0xFFFFFFFFUL)
+    {
+        snprintf(txt, sizeof(txt), "R%u RC%04X UP?",
+                 (unsigned)(uint16_t)log.runs, (unsigned)log.rc_hist[0]);
+    }
+    else
+    {
+        // worst case "R65535 RC0000 UP1193046h59m" = 27 chars
+        snprintf(txt, sizeof(txt), "R%u RC%04X UP%luh%02um",
+                 (unsigned)(uint16_t)log.runs, (unsigned)log.rc_hist[0],
+                 (unsigned long)(log.prev_uptime_s / 3600),
+                 (unsigned)((log.prev_uptime_s / 60) % 60));
+    }
+    dbg_gatt_text(gattdb_xgatt_name, gattdb_xgatt_name_len, txt);
+
+    // xgatt_owner: reset cause history, newest first
+    snprintf(txt, sizeof(txt), "RC %04X %04X %04X %04X %04X",
+             (unsigned)log.rc_hist[0], (unsigned)log.rc_hist[1],
+             (unsigned)log.rc_hist[2], (unsigned)log.rc_hist[3],
+             (unsigned)log.rc_hist[4]);
+    dbg_gatt_text(gattdb_xgatt_owner, gattdb_xgatt_owner_len, txt);
+
+    // xgatt_email: last watchdog-warning capture
+    if (log.hang_run)
+    {
+        // worst case "P00000000 L00000000 X511 R65535" = 31 chars
+        snprintf(txt, sizeof(txt), "P%08lX L%08lX X%u R%u",
+                 (unsigned long)log.hang_pc, (unsigned long)log.hang_lr,
+                 (unsigned)(log.hang_exc & 0x1FFu), (unsigned)log.hang_run);
+    }
+    else
+    {
+        snprintf(txt, sizeof(txt), "P none");
+    }
+    dbg_gatt_text(gattdb_xgatt_email, gattdb_xgatt_email_len, txt);
+
+    // xgatt_phone (16 bytes): last failed assert
+    if (log.assert_run)
+    {
+        // 16-byte field: worst case "L9999 SFFFF R999" = 16 chars
+        snprintf(txt, sizeof(txt), "L%u S%04X R%u",
+                 (unsigned)(log.assert_line % 10000u),
+                 (unsigned)log.assert_status,
+                 (unsigned)(log.assert_run % 1000u));
+    }
+    else
+    {
+        snprintf(txt, sizeof(txt), "A none");
+    }
+    dbg_gatt_text(gattdb_xgatt_phone, gattdb_xgatt_phone_len, txt);
+}
+
+#endif  // BT_DEBUG_RESET_LOG
+
+
+/**************************************************************************//**
  * Single line functions
  *****************************************************************************/
 
@@ -713,6 +953,9 @@ void app_init(void)       // port note: no longer SL_WEAK
 
     // Store the cause of the last reset, and clear the reset cause register
     uint32_t resetCause = RMU_ResetCauseGet();
+#ifdef BT_DEBUG_RESET_LOG
+    debug_log_early_init(resetCause);   // DEBUG reset log - remove before release
+#endif
     // Clear Reset causes so we know which reset matters the next time
     RMU_ResetCauseClear();
 
@@ -1238,7 +1481,21 @@ void init_watchdog(void)
     //wdogInit.winSel           =
 
     // Initializing watchdog with chosen settings
+#ifdef BT_DEBUG_RESET_LOG
+    // DEBUG reset log - remove before release. WARN interrupt at 75% of the
+    // period (~6 s without a feed; normal feeds are every 2 s).
+    wdogInit.warnSel            = wdogWarnTime75pct;
+#endif
+
     WDOGn_Init(DEFAULT_WDOG, &wdogInit);
+
+#ifdef BT_DEBUG_RESET_LOG
+    WDOGn_IntClear(DEFAULT_WDOG, WDOG_IF_WARN);
+    WDOGn_IntEnable(DEFAULT_WDOG, WDOG_IEN_WARN);
+    NVIC_ClearPendingIRQ(WDOG0_IRQn);
+    NVIC_SetPriority(WDOG0_IRQn, 0);    // above everything that can be masked by BASEPRI
+    NVIC_EnableIRQ(WDOG0_IRQn);
+#endif
 }
 
 
@@ -2030,6 +2287,9 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
             APP_ASSERT_STATUS(sc);
 
             fill_addrs();
+#ifdef BT_DEBUG_RESET_LOG
+            debug_log_persist_and_publish();    // DEBUG reset log - remove before release
+#endif
 
             // we're booted up, start the timers
             sc = app_timer_start(&(simple_timer_def[TIMER_TICK].timer),
@@ -2305,6 +2565,36 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
         case sl_bt_evt_gatt_server_attribute_value_id:
         {
             //DBPRINT("sl_bt_evt_gatt_server_attribute_value_id...START/END\r\n");
+#ifdef BT_DEBUG_RESET_LOG
+            // DEBUG reset log test hook - remove before release.
+            // Write ASCII to xgatt_phone:  HANG   -> spin in the main loop (watchdog
+            //                                       capture test, expect X0)
+            //                              ASSERT -> fail an APP_ASSERT_STATUS
+            //                              CLEAR  -> erase the debug log
+            if (evt->data.evt_gatt_server_attribute_value.attribute == gattdb_xgatt_phone)
+            {
+                const uint8_t *v = evt->data.evt_gatt_server_attribute_value.value.data;
+                uint8_t        n = evt->data.evt_gatt_server_attribute_value.value.len;
+
+                if ((n >= 4) && (memcmp(v, "HANG", 4) == 0))
+                {
+                    DBPRINT("DEBUG: forced hang\r\n");
+                    while (1)
+                    {
+                        ;
+                    }
+                }
+                else if ((n >= 6) && (memcmp(v, "ASSERT", 6) == 0))
+                {
+                    APP_ASSERT_STATUS(SL_STATUS_FAIL);
+                }
+                else if ((n >= 5) && (memcmp(v, "CLEAR", 5) == 0))
+                {
+                    sl_bt_nvm_erase(PS_STORED_DEBUG_LOG);
+                    dbg_gatt_text(gattdb_xgatt_phone, gattdb_xgatt_phone_len, "cleared");
+                }
+            }
+#endif
             break;
         }
 
@@ -2713,6 +3003,9 @@ void timer_cb_watchdog(app_timer_t *timer, void *data)
     (void)data;
     //DBPRINT("Watchdog timer FED\n");
     WDOGn_Feed(DEFAULT_WDOG);
+#ifdef BT_DEBUG_RESET_LOG
+    dbg_noinit.uptime_s = dbg_uptime_s();   // DEBUG reset log - remove before release
+#endif
 }
 
 
