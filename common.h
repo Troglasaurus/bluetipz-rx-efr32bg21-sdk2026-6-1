@@ -31,7 +31,7 @@
  * NVM, and shows them in the xgatt_name/owner/email/phone characteristics.
  * See "Debug reset log" in app.c.
  */
-#define BT_DEBUG_RESET_LOG
+//#define BT_DEBUG_RESET_LOG
 
 #ifdef BT_DEBUG_RESET_LOG
 void debug_record_assert(uint32_t line, uint32_t status);

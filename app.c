@@ -87,7 +87,19 @@
 // Define this to get EM state transition information
 //#define OUTPUT_EM_INFO
 
-//#define CODEDPHY                        1
+// Relay on Coded PHY (extended advertising) as well as 1M legacy
+#define CODEDPHY                        1
+
+// TEST SWITCH - keep at 1 for normal builds.
+// 0 = ignore everything received as a legacy (1M) advertisement and act only
+// on Coded PHY packets. Used to prove the Rx really receives Coded PHY: with
+// this at 0, an Rx that alarms on a tip-up (or relays a Tx) heard it on Coded
+// PHY. Scanning itself is unchanged; the legacy reports are just dropped.
+#define SCAN_LEGACY_ENABLED             0
+
+#if !SCAN_LEGACY_ENABLED
+#warning "SCAN_LEGACY_ENABLED is 0: Rx ignores legacy (1M) advertisements (Coded PHY receive test)"
+#endif
 
 #define ADC_BATTERY                     0
 #define ADC_TEMP                        1
@@ -149,6 +161,24 @@
 #define TAZ_RELAY_CLEAR_DELAY_MS        25000
 #define POWERON_STATUS_TRANSMIT_MS      (25000)         // PowerOn advertising
 #define WATCHDOG_PET_MS                 2000            // Pet the watchdog every 2 seconds
+
+//
+// Flooded mesh relay
+//
+#define MESH_MAX_HOPS                   3               // relay while out hops <= this
+#define MESH_TABLE_SIZE                 8               // Tx units tracked for echo suppression
+#define MESH_MEMORY_TAZ_MS              ((MESH_MAX_HOPS + 2) * TAZ_RELAY_CLEAR_DELAY_MS)
+#define MESH_MEMORY_BEACON_MS           ((MESH_MAX_HOPS + 2) * BEACON_RELAY_CLEAR_DELAY_MS)
+
+//
+// 2020-format packet types (packetType byte), as defined by the Tx (custom_adv.h)
+//
+#define ADV_HEARTBEAT                   1
+#define ADV_POWER_ON                    2
+#define ADV_TAZ                         3               // sent by the Tx only in pre-2020 format;
+                                                        // Rx relays of tip-ups use it in 2020 format
+#define ADV_RESET                       4
+#define ADV_POWER_OFF                   5
 
 #define SYS_SLEEP_MS                    ((SYS_TICK_MS*3)/5)
 #define TICKS_IN_POWER_BLINK_INTERVAL   ((SECONDS_IN_POWER_BLINK_INTERVAL * 1000) / SYS_TICK_MS)
@@ -278,8 +308,16 @@ typedef enum
 {
     PKT_UNKNOWN,
     PKT_PRE_2020,               /** All pre 2020 packets are TAZ */
+    PKT_PRE_2020_RELAY,         /** pre 2020 TAZ relayed by old-firmware Rx (rx_old_uuid) */
     PKT_2020
 } packet_versions_t;
+
+typedef enum
+{
+    MESH_CLASS_TAZ,             /** tip-ups */
+    MESH_CLASS_BEACON,          /** all other 2020 packets */
+    MESH_CLASS_MAX
+} mesh_class_t;
 
 
 /**************************************************************************//**
@@ -304,8 +342,9 @@ typedef struct
 
     uint8_t           addr[6];
 
-    // high bit set, heartbeats are enabled and sent out.
-    uint8_t           version;
+    // Mesh hop count (was the version byte, always 0 from the Tx).
+    // 0 = sent by the Tx, n = relayed n times.
+    uint8_t           hops;
     uint8_t           packetType;
 
     // length of the name AD element is variable,
@@ -352,6 +391,16 @@ typedef struct
     uint8_t data_size;
 } taz_pkt_t;
 
+typedef struct
+{
+    bd_addr           addr;
+    bool              used;
+    uint32_t          touched_ms;                   // last time this Tx was heard
+    bool              valid[MESH_CLASS_MAX];
+    uint8_t           best_hops[MESH_CLASS_MAX];    // lowest hop count heard
+    uint32_t          last_ms[MESH_CLASS_MAX];      // last accepted copy
+} mesh_entry_t;
+
 
 /**************************************************************************//**
  * Local function prototypes
@@ -371,9 +420,9 @@ void                    em_transition_cb (sl_power_manager_em_t from, sl_power_m
 #endif
 
 uint16_t                fill_addrs();
-void                    fill_non_taz_beacon(bd_addr addr, uint8_t type, uint8_t version);
+void                    fill_non_taz_beacon(bd_addr addr, uint8_t type, uint8_t hops);
 void                    fill_taz_beacon(bd_addr addr);
-packet_versions_t       get_packet_version(uint8_t *adv_packet);
+packet_versions_t       get_packet_version(uint8_t *adv_packet, uint8_t len);
 
 #ifndef USE_EM4_ON_POWER_OFF
 static SM_States_t      get_latest_state( void );
@@ -446,7 +495,7 @@ static uint8_t                adv_handle_codedPHY       = 0xfe;
 
 static uint8_t                beacon_type;
 static uint8_t                param_buffer[149];
-static uint8_t                repeater_addr[6];
+static uint8_t                repeater_addr[6];        // xgatt_repeat: kept in the GATT interface, no longer used for relaying
 static uint8_t                suppress_filter = 0;
 static uint8_t                toggle_scan_method = 0;
 
@@ -458,12 +507,17 @@ static bool                   supression_active         = false;
 static bool                   vibrator_state            = false;
 
 static bd_addr                addrs[MAX_TX_TO_STORE];
-static bd_addr                last_device_seen;
 static bd_addr                last_taz_seen;
 
 static non_taz_pkt_t          non_taz_pkt;
 static runState               states[SM_STATES_SIZE];
 static taz_pkt_t              tazpkt;
+
+static uint8_t                last_taz_hops;            // hop count of the tip-up being alarmed on
+static bd_addr                beacon_addr;              // latest relayable non-TAZ packet...
+static uint8_t                beacon_pkt_type;          // ...its packetType
+static uint8_t                beacon_hops;              // ...and its incoming hop count
+static mesh_entry_t           mesh_table[MESH_TABLE_SIZE];
 
 static SM_States_t            previousState             = SM_NONE;
 static SM_States_t            nextState                 = SM_POWERING_ON;
@@ -492,7 +546,7 @@ static const uint8_t  old_uuid[] =        {0x58, 0xd8, 0x3c, 0x8a, 0x2e, 0xa1, 0
 static const uint8_t  rx_new_uuid[] =     {0x58, 0xd8, 0x3c, 0x8a, 0x2e, 0xa1, 0x7f, 0xbc,
                                            0xff, 0x4a, 0xb6, 0xb4, 0x5A, 0x48, 0xb5, 0xbe};
 
-// used for taz packet to maintain backwards compatibility
+// pre-2020 TAZ relayed by an old-firmware Rx. No longer sent; still accepted (as hop 1).
 static const uint8_t  rx_old_uuid[] =     {0x59, 0xd8, 0x3c, 0x8a, 0x2e, 0xa1, 0x7f, 0xbc,
                                            0xff, 0x4a, 0xb6, 0xb4, 0x59, 0x48, 0xb5, 0xbe};
 
@@ -547,6 +601,141 @@ static simple_timer_def_t simple_timer_def[TIMER_MAX] =
       .is_periodic  = true,
     },
 };
+
+
+/**************************************************************************//**
+ * Flooded mesh relay (Task 1)
+ *
+ * Every Rx relays what it hears from a Tx (or from another Rx's relay) as a
+ * 2020-format packet, with the old version byte now carrying a hop count:
+ *
+ *   hops = 0   heard directly from the Tx (payload MAC == sender MAC)
+ *   hops = n   relayed n times. An Rx that hears hops n advertises hops n+1,
+ *              but only while n+1 <= MESH_MAX_HOPS. It still alarms on a
+ *              tip-up it hears at any hop count.
+ *
+ * Tip-ups (pre-2020 Tx packets) are relayed as 2020 packets with packetType
+ * ADV_TAZ; the pre-2020 Rx relay packet (rx_old_uuid) is no longer sent.
+ * Relays from old-firmware Rx units (rx_old_uuid tip-ups, and 2020 relays
+ * whose hop byte is still 0) are accepted as hop 1.
+ *
+ * Echo suppression: for each Tx, and separately for tip-ups and other
+ * packets, the Rx remembers the best (lowest) hop count it has heard. While
+ * that memory is fresh it ignores any copy with a higher hop count: those are
+ * echoes of its own relay or of relays further out. They neither refresh its
+ * relay timer nor restart a relay after it has cleared, so relays die out in
+ * order, nearest to the Tx first, once the Tx goes quiet. The memory lasts
+ * (MESH_MAX_HOPS + 2) relay-clear periods after the last accepted packet,
+ * which outlasts the longest possible echo tail.
+ *
+ * Filtering is unchanged: with no Tx addresses stored, every Tx is relayed;
+ * with any stored, only those Tx are relayed (and alarmed on).
+ *****************************************************************************/
+static uint32_t mesh_now_ms(void)
+{
+    return (uint32_t)((sl_sleeptimer_get_tick_count64() * 1000ULL)
+                      / sl_sleeptimer_get_timer_frequency());
+}
+
+static uint8_t mesh_out_hops(uint8_t in_hops)
+{
+    return (in_hops >= MESH_MAX_HOPS) ? (MESH_MAX_HOPS + 1) : (in_hops + 1);
+}
+
+/*
+ * Returns true if this copy should be acted on (relayed / alarmed on / used to
+ * refresh a relay), false if it is an echo or a worse path than one already
+ * heard for this Tx.
+ */
+static bool mesh_accept(const bd_addr *addr, mesh_class_t cls, uint8_t hops)
+{
+    static const uint32_t memory_ms[MESH_CLASS_MAX] =
+    {
+        [MESH_CLASS_TAZ]    = MESH_MEMORY_TAZ_MS,
+        [MESH_CLASS_BEACON] = MESH_MEMORY_BEACON_MS,
+    };
+
+    uint32_t      now    = mesh_now_ms();
+    mesh_entry_t *entry  = NULL;
+    mesh_entry_t *oldest = &mesh_table[0];
+
+    for (int i = 0; i < MESH_TABLE_SIZE; i++)
+    {
+        mesh_entry_t *e = &mesh_table[i];
+
+        if (e->used && (memcmp(e->addr.addr, addr->addr, sizeof(e->addr.addr)) == 0))
+        {
+            entry = e;
+            break;
+        }
+        if (!e->used)
+        {
+            oldest = e;             // prefer a free slot
+        }
+        else if (oldest->used && ((now - e->touched_ms) > (now - oldest->touched_ms)))
+        {
+            oldest = e;
+        }
+    }
+
+    if (entry == NULL)
+    {
+        entry = oldest;             // free slot, or least recently heard Tx
+        memset(entry, 0, sizeof(*entry));
+        memcpy(entry->addr.addr, addr->addr, sizeof(entry->addr.addr));
+        entry->used = true;
+    }
+
+    entry->touched_ms = now;
+
+    if (entry->valid[cls] && ((now - entry->last_ms[cls]) < memory_ms[cls]))
+    {
+        if (hops > entry->best_hops[cls])
+        {
+            return false;           // echo, or a longer path than we know of
+        }
+    }
+    else
+    {
+        entry->valid[cls] = true;   // first copy, or memory expired: start over
+    }
+
+    entry->best_hops[cls] = hops;
+    entry->last_ms[cls]   = now;
+    return true;
+}
+
+/*
+ * Update the relay advertisement (non_taz_pkt) for this Tx, packet type and
+ * incoming hop count, re-advertising only when the content changes. Stops
+ * advertising if the hop limit has been reached.
+ */
+static void mesh_relay_refresh(bd_addr addr, uint8_t type, uint8_t in_hops)
+{
+    uint8_t out_hops = mesh_out_hops(in_hops);
+
+    if ((memcmp(non_taz_pkt.addr, addr.addr, sizeof(non_taz_pkt.addr)) == 0) &&
+        (non_taz_pkt.packetType == type) &&
+        (non_taz_pkt.hops == out_hops))
+    {
+        return;                     // already advertising exactly this
+    }
+
+    DBPRINT("Relay update type %d hops %d\r\n", type, out_hops);
+    fill_non_taz_beacon(addr, type, out_hops);
+
+    if (out_hops <= MESH_MAX_HOPS)
+    {
+        start_advertising_beacon();
+    }
+    else
+    {
+        sl_bt_advertiser_stop(adv_handle_1M);
+#ifdef CODEDPHY
+        sl_bt_advertiser_stop(adv_handle_codedPHY);
+#endif
+    }
+}
 
 
 /**************************************************************************//**
@@ -1272,7 +1461,7 @@ uint16_t fill_addrs()
 /**************************************************************************//**
  * fill_non_taz_beacon - store non-TAZ BLE address and UUID information
  *****************************************************************************/
-void fill_non_taz_beacon(bd_addr addr, uint8_t type, uint8_t version)
+void fill_non_taz_beacon(bd_addr addr, uint8_t type, uint8_t hops)
 {
     non_taz_pkt.len_flags   = 2;
     non_taz_pkt.type_flags  = 1;
@@ -1281,7 +1470,7 @@ void fill_non_taz_beacon(bd_addr addr, uint8_t type, uint8_t version)
     non_taz_pkt.type_addr   = 0xff;
     memcpy(&non_taz_pkt.addr, &addr, sizeof(non_taz_pkt.addr));
 
-    non_taz_pkt.version     = version;
+    non_taz_pkt.hops        = hops;
     non_taz_pkt.packetType  = type;
     non_taz_pkt.type_id     = 0x07;
     non_taz_pkt.len_id      = 17;
@@ -1300,16 +1489,11 @@ void fill_taz_beacon(bd_addr addr)
     tazpkt.type_flags       = 1;
     tazpkt.val_flags        = 6;
 
+    // Tip-up: relayed as a 2020 packet (type ADV_TAZ) carrying the hop count.
+    // The pre-2020 Rx relay packet (rx_old_uuid) is no longer sent.
     if (beacon_type == GAP_TYPE_SERVICE)
     {
-        tazpkt.len_addr     = 7;
-        tazpkt.type_addr    = GAP_TYPE_CUSTOM;
-        memcpy(tazpkt.addr, &addr, sizeof(tazpkt.addr));
-
-        tazpkt.type_id      = beacon_type;
-        tazpkt.len_id       = 17;
-        memcpy(tazpkt.id, rx_old_uuid, sizeof(tazpkt.id));
-
+        fill_non_taz_beacon(addr, ADV_TAZ, mesh_out_hops(last_taz_hops));
     }
 
     // Status
@@ -1346,8 +1530,15 @@ void fill_taz_beacon(bd_addr addr)
 /**************************************************************************//**
  * get_packet_version - get BLE packet information
  *****************************************************************************/
-packet_versions_t get_packet_version(uint8_t *adv_packet)
+packet_versions_t get_packet_version(uint8_t *adv_packet, uint8_t len)
 {
+    // pre-2020 packets are 29 bytes and 2020 packets 31; anything shorter
+    // can't be ours (and would make the checks below read past the data)
+    if ((len < 29) || ((adv_packet[3] != 7) && (len < 31)))
+    {
+        return PKT_UNKNOWN;
+    }
+
     // make sure mfr id is where we expect it to be
     // adv_packet[4] == 0xff;
     packet_versions_t results = PKT_UNKNOWN;
@@ -1364,8 +1555,12 @@ packet_versions_t get_packet_version(uint8_t *adv_packet)
         cmp_results = memcmp(&adv_packet[13], old_uuid, sizeof(old_uuid));
         if ( cmp_results != 0 )
         {
-            // Check to see if it's coming from an rx
+            // Check to see if it's a relay from an old-firmware rx
             cmp_results = memcmp(&adv_packet[13], rx_old_uuid, sizeof(old_uuid));
+            if ( cmp_results == 0 )
+            {
+                results = PKT_PRE_2020_RELAY;
+            }
         }
     }
     else
@@ -1734,6 +1929,12 @@ void run_active(SM_Events_t evt)
                     fill_taz_beacon(last_taz_seen);
                     start_advertising_taz();
                 }
+                else
+                {
+                    // already relaying a tip-up: follow a change of Tx or a
+                    // shorter path (lower hop count)
+                    mesh_relay_refresh(last_taz_seen, ADV_TAZ, last_taz_hops);
+                }
 
                 app_timer_stop( &(simple_timer_def[TIMER_TAZ_CLEAR].timer) );
 
@@ -1806,8 +2007,8 @@ void run_beacon_relay(SM_Events_t evt)
     {
         // do entry things
         DBPRINT("Relaying beacon\r\n");
+        fill_non_taz_beacon(beacon_addr, beacon_pkt_type, mesh_out_hops(beacon_hops));
         start_advertising_beacon();
-        // setup data for advertising beacon info
 
         // each time we're in here, let's kick a timer to get out a few
         // seconds down the road.
@@ -1875,7 +2076,9 @@ void run_beacon_relay(SM_Events_t evt)
         case EVT_BEACON_FOUND:
         {
             // got an alert
-            // rebroadcast the beacon
+            // rebroadcast the beacon (latest packet wins; re-advertise only
+            // if the Tx, packet type or hop count changed)
+            mesh_relay_refresh(beacon_addr, beacon_pkt_type, beacon_hops);
 
             // each timer we're in here, let's kick a timer to get out a few
             // seconds down the road.
@@ -1995,11 +2198,8 @@ void run_idle(SM_Events_t evt)
 
         case EVT_BEACON_FOUND:
         {
-            // got an alert
-            if (should_trigger_off_addr(&last_taz_seen) )
-            {
-                nextState = SM_BEACON_RELAY;
-            }
+            // got a relayable packet (already filtered by Tx address)
+            nextState = SM_BEACON_RELAY;
 
             break;
         }
@@ -2252,6 +2452,111 @@ bool should_trigger_off_addr(bd_addr *addr )
 
 
 /**************************************************************************//**
+ * process_adv_report - handle one received advertisement
+ *
+ * Called for legacy advertisements (1M) and for complete extended
+ * advertisements (Coded PHY from the Tx and from other Rx relays). Both carry
+ * the same payload, so a Tx heard on both PHYs is handled twice; the mesh
+ * logic treats the second copy as a refresh.
+ *
+ * @param[in] paddr  sender's address
+ * @param[in] data   advertising data
+ * @param[in] len    advertising data length
+ *****************************************************************************/
+static void process_adv_report(uint8_t *paddr, uint8_t *data, uint8_t len)
+{
+    bd_addr           tx_address;
+    uint8_t           hops;
+    bool              is_taz;
+    bool              direct;
+    packet_versions_t version;
+
+    version = get_packet_version(data, len);
+
+    if (version == PKT_UNKNOWN)
+    {
+        return;
+    }
+
+    // The Tx address is in the payload. If it matches the sender, the
+    // packet came straight from the Tx; otherwise it is a relay.
+    memcpy( tx_address.addr, &data[5], 6 );
+    direct = ( memcmp( &data[5], paddr, 6 ) == 0 );
+
+    if (version == PKT_PRE_2020)
+    {
+        if (!direct)
+        {
+            return;                  // Tx uuid but not from the Tx
+        }
+        is_taz = true;
+        hops   = 0;
+    }
+    else if (version == PKT_PRE_2020_RELAY)
+    {
+        is_taz = true;              // old-firmware Rx relay
+        hops   = 1;
+    }
+    else    // PKT_2020
+    {
+        is_taz = ( data[12] == ADV_TAZ );
+        if (direct)
+        {
+            hops = 0;               // from the Tx, whatever the byte says
+        }
+        else
+        {
+            // old-firmware Rx relays copy the Tx's 0
+            hops = ( data[11] == 0 ) ? 1 : data[11];
+        }
+    }
+
+    // only Tx units in the filter (or all, if the filter is empty)
+    if ( !should_trigger_off_addr( &tx_address ) )
+    {
+        return;
+    }
+
+    // drop echoes and copies from longer paths
+    if ( !mesh_accept( &tx_address,
+                       is_taz ? MESH_CLASS_TAZ : MESH_CLASS_BEACON,
+                       hops ) )
+    {
+        return;
+    }
+
+    if (is_taz)
+    {
+        memcpy( last_taz_seen.addr, tx_address.addr, sizeof(last_taz_seen.addr) );
+        last_taz_hops = hops;
+        run_machine(EVT_TAZ_FOUND);
+    }
+    else
+    {
+        // A non-tip-up packet from the Tx we're alarming on ends the
+        // alarm, as before. Only one at least as close as the tip-up
+        // counts, so a late relay of an older packet can't end it.
+        if ( (nextState == SM_ACTIVE) &&
+             (beacon_type == GAP_TYPE_SERVICE) &&
+             (memcmp( tx_address.addr, last_taz_seen.addr, 6 ) == 0) &&
+             (hops <= last_taz_hops) )
+        {
+            run_machine(EVT_TAZ_CLEAR);
+        }
+
+        // relay it, if the hop limit allows
+        if ( hops < MESH_MAX_HOPS )
+        {
+            memcpy( beacon_addr.addr, tx_address.addr, sizeof(beacon_addr.addr) );
+            beacon_pkt_type = data[12];
+            beacon_hops     = hops;
+            run_machine(EVT_BEACON_FOUND);
+        }
+    }
+}
+
+
+/**************************************************************************//**
  * Bluetooth stack event handler.
  * This overrides the dummy weak implementation.
  *
@@ -2263,7 +2568,6 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
     bd_addr address;
     uint8_t address_type;
     uint8_t system_id[8];
-    uint8_t *data;
 
 
     //DBPRINT("sl_bt_on_event(%ld) \r\n", SL_BT_MSG_ID(evt->header) );
@@ -2448,70 +2752,34 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
         }
 
         // port note: sl_bt_evt_scanner_scan_report was removed from the API.
-        // With the legacy scanner feature the 4.3.1 stack already reported
-        // through sl_bt_evt_scanner_legacy_advertisement_report.
+        // Legacy (1M) advertisements arrive here...
         case sl_bt_evt_scanner_legacy_advertisement_report_id:
         {
-            //DBPRINT("sl_bt_evt_scanner_legacy_advertisement_report_id...START\r\n");
+#if SCAN_LEGACY_ENABLED
+            process_adv_report(evt->data.evt_scanner_legacy_advertisement_report.address.addr,
+                               evt->data.evt_scanner_legacy_advertisement_report.data.data,
+                               evt->data.evt_scanner_legacy_advertisement_report.data.len);
+#endif
+            break;
+        }
 
-            bd_addr incoming_address;
-            bd_addr device_address;
-            uint8_t *paddr;
-            packet_versions_t version;
-
-            paddr = evt->data.evt_scanner_legacy_advertisement_report.address.addr;
-            data = evt->data.evt_scanner_legacy_advertisement_report.data.data;
-            version = get_packet_version(data);
-
-            // if address inside advertisement doesn't match actual device address
-            // then this is from a repeater.  Don't repeat again.
-            if ( memcmp( &data[5], paddr, 6 ) != 0 )
+        // ...and extended advertisements (Coded PHY) here. Needs the
+        // bluetooth_feature_extended_scanner component.
+        case sl_bt_evt_scanner_extended_advertisement_report_id:
+        {
+            if ((evt->data.evt_scanner_extended_advertisement_report.data_completeness
+                 == sl_bt_scanner_data_status_complete)
+#if !SCAN_LEGACY_ENABLED
+                // test mode: accept only packets whose primary PHY really was Coded
+                && (evt->data.evt_scanner_extended_advertisement_report.primary_phy
+                    == sl_bt_gap_phy_coded)
+#endif
+               )
             {
-                // Unless the address equals the repeater address value
-                if ( memcmp( paddr, repeater_addr, 6 ) != 0 )
-                {
-                    break;
-                }
+                process_adv_report(evt->data.evt_scanner_extended_advertisement_report.address.addr,
+                                   evt->data.evt_scanner_extended_advertisement_report.data.data,
+                                   evt->data.evt_scanner_extended_advertisement_report.data.len);
             }
-
-            if (version != PKT_UNKNOWN)
-            {
-                memcpy( device_address.addr, &data[5], 6 );
-                memcpy( last_device_seen.addr, paddr, 6 );
-                if ( should_trigger_off_addr( &device_address ) )
-                {
-                    if (version == PKT_PRE_2020)
-                    {
-                        // copy address into some local storage
-                        memcpy( last_taz_seen.addr, device_address.addr, sizeof(last_taz_seen.addr));
-                        run_machine(EVT_TAZ_FOUND);
-                    }
-                    else if (version == PKT_2020)
-                    {
-                        memcpy( incoming_address.addr, device_address.addr, sizeof(incoming_address.addr) );
-                        if ( nextState == SM_ACTIVE )
-                        {
-                            if ( memcmp( incoming_address.addr,last_taz_seen.addr, 6) == 0 )
-                            {
-                                run_machine(EVT_TAZ_CLEAR);
-                            }
-                        }
-
-                        bool packet_changed = non_taz_pkt.packetType != data[12] ||
-                                              non_taz_pkt.version != data[11];
-                        fill_non_taz_beacon(incoming_address, data[12], data[11]);
-                        if (packet_changed)
-                        {
-                            // packet changed, need to start and stop
-                            DBPRINT("Packet changed");
-                            start_advertising_beacon();
-                        }
-                        run_machine(EVT_BEACON_FOUND);
-                    }
-                }
-            }
-
-            //DBPRINT("sl_bt_evt_scanner_legacy_advertisement_report_id...END\r\n");
             break;
         }
 
@@ -2570,7 +2838,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
             // Write ASCII to xgatt_phone:  HANG   -> spin in the main loop (watchdog
             //                                       capture test, expect X0)
             //                              ASSERT -> fail an APP_ASSERT_STATUS
-            //                              CLEAR  -> erase the debug log
+            //                              CLEAR  -> restart the log (this run = R1)
             if (evt->data.evt_gatt_server_attribute_value.attribute == gattdb_xgatt_phone)
             {
                 const uint8_t *v = evt->data.evt_gatt_server_attribute_value.value.data;
@@ -2590,7 +2858,14 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
                 }
                 else if ((n >= 5) && (memcmp(v, "CLEAR", 5) == 0))
                 {
-                    sl_bt_nvm_erase(PS_STORED_DEBUG_LOG);
+                    // Start a fresh log with the CURRENT run as run 1, so a
+                    // hang in this run is stored as R1 at the next boot (run 0
+                    // means "no record" and would be hidden).
+                    dbg_log_t fresh;
+                    memset(&fresh, 0, sizeof(fresh));
+                    fresh.runs       = 1;
+                    fresh.rc_hist[0] = (uint16_t)dbg_reset_cause;
+                    sl_bt_nvm_save(PS_STORED_DEBUG_LOG, sizeof(fresh), (uint8_t *)&fresh);
                     dbg_gatt_text(gattdb_xgatt_phone, gattdb_xgatt_phone_len, "cleared");
                 }
             }
@@ -2696,6 +2971,25 @@ void start_advertising_taz()
 {
     sl_status_t sc;
 
+    // Tip-up relay: 2020 format (non_taz_pkt, filled by fill_taz_beacon()),
+    // unless the hop limit has been reached, in which case the Rx alarms
+    // but does not relay.
+    if (beacon_type == GAP_TYPE_SERVICE)
+    {
+        if (non_taz_pkt.hops <= MESH_MAX_HOPS)
+        {
+            start_advertising_beacon();
+        }
+        else
+        {
+            sl_bt_advertiser_stop(adv_handle_1M);
+#ifdef CODEDPHY
+            sl_bt_advertiser_stop(adv_handle_codedPHY);
+#endif
+        }
+        return;
+    }
+
     //  DBPRINT("startingAdv\r\n");
 
     sc = sl_bt_advertiser_stop (adv_handle_1M);
@@ -2745,7 +3039,8 @@ void start_scanning()
     //        SCAN_ON_MSEC, SCAN_OFF_MSEC,
     //        SCAN_WINDOW_MSEC,SCAN_INTERVAL_MSEC-SCAN_WINDOW_MSEC);
 
-    // Detect Legacy.  Detection of Coded PHY using this method does not work.
+    // Scan 1M and Coded PHY. Coded PHY packets are extended advertisements and
+    // are only reported with the bluetooth_feature_extended_scanner component.
 
 #if 0
     if (toggle_scan_method & SCAN_BY_STOP_AND_DELAY)

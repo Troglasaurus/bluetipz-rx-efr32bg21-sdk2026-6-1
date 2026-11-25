@@ -13,7 +13,7 @@ DocumentNamespace: https://silabs.com
 
 ## Creation Information
 Creator: Organization: Silicon Laboratories, Inc.
-Created: 2026-11-06T16:12:27Z
+Created: 2026-11-14T23:42:57Z
 ## Relationships
 Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-silabs.simplicity_sdk-2026.6.1
 
@@ -30,6 +30,7 @@ Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.sim
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-app_os_helper
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-app_timer
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_extended_advertiser
+Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_gap
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_gatt
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_gatt_server
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_legacy_advertiser
@@ -195,7 +196,7 @@ Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.sim
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-status
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-trustzone_unaware
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-udelay_cortexm
-Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_gap
+Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1 CONTAINS SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_extended_scanner
 
 ## Package Information
 PackageName: EFR32BG21A020F512IM32
@@ -251,6 +252,17 @@ PackageSupplier: Organization: Silicon Laboratories, Inc.
 PackageLicenseConcluded: MSLA
 ## Relationships
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_extended_advertiser CONTAINED_BY SPDXRef-silabs.simplicity_sdk-2026.6.1
+
+## Package Information
+PackageName: GAP
+SPDXID: SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_gap
+PackageVersion: 2026.6.1
+PrimaryPackagePurpose: LIBRARY
+PackageDownloadLocation: NOASSERTION
+PackageSupplier: Organization: Silicon Laboratories, Inc.
+PackageLicenseConcluded: MSLA
+## Relationships
+Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_gap CONTAINED_BY SPDXRef-silabs.simplicity_sdk-2026.6.1
 
 ## Package Information
 PackageName: GATT Client
@@ -2083,12 +2095,12 @@ PackageLicenseConcluded: Zlib
 Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1-udelay_cortexm CONTAINED_BY SPDXRef-silabs.simplicity_sdk-2026.6.1
 
 ## Package Information
-PackageName: GAP
-SPDXID: SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_gap
+PackageName: Scanner for extended advertisements
+SPDXID: SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_extended_scanner
 PackageVersion: 2026.6.1
 PrimaryPackagePurpose: LIBRARY
 PackageDownloadLocation: NOASSERTION
 PackageSupplier: Organization: Silicon Laboratories, Inc.
 PackageLicenseConcluded: MSLA
 ## Relationships
-Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_gap CONTAINED_BY SPDXRef-silabs.simplicity_sdk-2026.6.1
+Relationship: SPDXRef-silabs.simplicity_sdk-2026.6.1-bluetooth_feature_extended_scanner CONTAINED_BY SPDXRef-silabs.simplicity_sdk-2026.6.1

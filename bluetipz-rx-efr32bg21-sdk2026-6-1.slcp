@@ -84,6 +84,9 @@ component:
   id: bootloader_interface
 - package: simplicity_sdk
   vendor: silabs
+  id: btmesh_stack_scanner_extended
+- package: simplicity_sdk
+  vendor: silabs
   id: clock_manager
 - package: simplicity_sdk
   vendor: silabs
@@ -197,6 +200,9 @@ autoselected_components:
 - package: simplicity_sdk
   vendor: silabs
   id: bluetooth_feature_connection
+- package: simplicity_sdk
+  vendor: silabs
+  id: bluetooth_feature_extended_scanner
 - package: simplicity_sdk
   vendor: silabs
   id: bluetooth_feature_local_privacy

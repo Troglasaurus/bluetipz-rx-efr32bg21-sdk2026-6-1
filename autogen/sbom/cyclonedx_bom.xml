@@ -10,7 +10,7 @@ referenced in this SBOM.)
 -->
 <bom xmlns="http://cyclonedx.org/schema/bom/1.6" version="1">
   <metadata>
-    <timestamp>2026-11-06T16:12:27Z</timestamp>
+    <timestamp>2026-11-14T23:42:57Z</timestamp>
     <authors>
       <author>
         <name>Silicon Laboratories, Inc.</name>
@@ -67,6 +67,16 @@ referenced in this SBOM.)
         </component>
         <component bom-ref="silabs.simplicity_sdk:2026.6.1:bluetooth_feature_extended_advertiser" type="library">
           <name>Extended Advertising</name>
+          <version>2026.6.1</version>
+	      <supplier>
+	        <name>Silicon Laboratories, Inc.</name>
+	      </supplier>
+          <licenses>
+            <expression>MSLA</expression>
+          </licenses>
+        </component>
+        <component bom-ref="silabs.simplicity_sdk:2026.6.1:bluetooth_feature_gap" type="library">
+          <name>GAP</name>
           <version>2026.6.1</version>
 	      <supplier>
 	        <name>Silicon Laboratories, Inc.</name>
@@ -1745,8 +1755,8 @@ referenced in this SBOM.)
             <expression>Zlib</expression>
           </licenses>
         </component>
-        <component bom-ref="silabs.simplicity_sdk:2026.6.1:bluetooth_feature_gap" type="library">
-          <name>GAP</name>
+        <component bom-ref="silabs.simplicity_sdk:2026.6.1:bluetooth_feature_extended_scanner" type="library">
+          <name>Scanner for extended advertisements</name>
           <version>2026.6.1</version>
 	      <supplier>
 	        <name>Silicon Laboratories, Inc.</name>
