@@ -95,7 +95,7 @@
 // on Coded PHY packets. Used to prove the Rx really receives Coded PHY: with
 // this at 0, an Rx that alarms on a tip-up (or relays a Tx) heard it on Coded
 // PHY. Scanning itself is unchanged; the legacy reports are just dropped.
-#define SCAN_LEGACY_ENABLED             0
+#define SCAN_LEGACY_ENABLED             1
 
 #if !SCAN_LEGACY_ENABLED
 #warning "SCAN_LEGACY_ENABLED is 0: Rx ignores legacy (1M) advertisements (Coded PHY receive test)"
